@@ -53,24 +53,6 @@ func (c *Conn) prepareWrite() error {
 	return nil
 }
 
-// write the contents of p into device.
-// It returns the number of bytes written from p (0 <= n <= len(p))
-// and any error encountered that caused the write to stop early.
-func (c *Conn) write(p []byte) (nn int, err error) {
-	return c.w.Write(p)
-}
-
-// flush writes any buffered data to the network.
-func (c *Conn) flush() error {
-	return c.w.Flush()
-}
-
-// read reads up to len(p) bytes into p. It returns the number of bytes
-// read (0 <= n <= len(p)) and any error encountered.
-func (c *Conn) read(p []byte) (n int, err error) {
-	return c.r.Read(p)
-}
-
 // logs received frame
 func (c *Conn) logResponse() {
 	c.r.Log("response")
@@ -191,8 +173,8 @@ type reader struct {
 
 // reset discards any buffered data. Also resets collected frame's log message.
 func (b *reader) reset(r io.Reader) {
-	b.Reset(r)
-	b.buf.Reset()
+	b.Reader.Reset(r)
+	b.logger.buf.Reset()
 }
 
 // io.Reader interface implementation.
@@ -200,7 +182,7 @@ func (b *reader) reset(r io.Reader) {
 func (b *reader) Read(p []byte) (n int, err error) {
 	n, err = b.Reader.Read(p)
 	if err == nil && b.log != nil {
-		_, err = b.buf.Write(p)
+		_, err = b.logger.buf.Write(p)
 	}
 	return
 }
@@ -210,7 +192,18 @@ func (b *reader) Read(p []byte) (n int, err error) {
 func (b *reader) ReadByte() (n byte, err error) {
 	n, err = b.Reader.ReadByte()
 	if err == nil && b.log != nil {
-		_ = b.buf.WriteByte(n)
+		_ = b.logger.buf.WriteByte(n)
+	}
+	return
+}
+
+// bufio.Reader interface implementation.
+//
+//	ReadBytes reads until the first occurrence of delim in the input and appends returned data to log buffer.
+func (b *reader) ReadBytes(delim byte) (data []byte, err error) {
+	data, err = b.Reader.ReadBytes(delim)
+	if err == nil && b.log != nil {
+		_, err = b.logger.buf.Write(data)
 	}
 	return
 }
@@ -223,8 +216,8 @@ type writer struct {
 
 // reset discards any buffered data. Also resets collected frame's log message.
 func (b *writer) reset(w io.Writer) {
-	b.Reset(w)
-	b.buf.Reset()
+	b.Writer.Reset(w)
+	b.logger.buf.Reset()
 }
 
 // io.Writer implementation.
@@ -232,7 +225,7 @@ func (b *writer) reset(w io.Writer) {
 func (b *writer) Write(p []byte) (nn int, err error) {
 	nn, err = b.Writer.Write(p)
 	if err == nil && b.log != nil {
-		_, err = b.buf.Write(p)
+		_, err = b.logger.buf.Write(p)
 	}
 	return
 }
@@ -242,7 +235,7 @@ func (b *writer) Write(p []byte) (nn int, err error) {
 func (b *writer) WriteByte(p byte) (err error) {
 	err = b.Writer.WriteByte(p)
 	if err == nil && b.log != nil {
-		_ = b.buf.WriteByte(p)
+		_ = b.logger.buf.WriteByte(p)
 	}
 	return
 }

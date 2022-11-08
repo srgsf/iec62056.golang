@@ -84,13 +84,13 @@ func TestSetWriteTimeout(t *testing.T) {
 
 func TestNoLoggerRead(t *testing.T) {
 	var c mockConn
-	conn := newConn(&c, nil,false, 3*time.Second)
+	conn := newConn(&c, nil, false, 3*time.Second)
 	_ = conn.prepareRead()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	c.rBuf.Write(payload)
 	res := make([]byte, len(payload))
 	_ = conn.prepareRead()
-	_, _ = conn.read(res)
+	_, _ = conn.r.Read(res)
 	res = conn.r.buf.Bytes()
 	if len(res) != 0 {
 		t.Error("frame is saved even without logger configured.")
@@ -99,10 +99,10 @@ func TestNoLoggerRead(t *testing.T) {
 
 func TestNoLoggerWrite(t *testing.T) {
 	var c mockConn
-	conn := newConn(&c, nil,false, 3*time.Second)
+	conn := newConn(&c, nil, false, 3*time.Second)
 	_ = conn.prepareWrite()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	_, _ = conn.write(payload)
+	_, _ = conn.w.Write(payload)
 	res := conn.w.buf.Bytes()
 	if len(res) != 0 {
 		t.Error("frame is saved even without logger configured.")
@@ -111,13 +111,13 @@ func TestNoLoggerWrite(t *testing.T) {
 
 func TestLoggerRead(t *testing.T) {
 	var c mockConn
-	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate),false, 3*time.Second)
+	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
 	_ = conn.prepareRead()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	c.rBuf.Write(payload)
 	res := make([]byte, len(payload))
 	_ = conn.prepareRead()
-	_, _ = conn.read(res)
+	_, _ = conn.r.Read(res)
 	res = conn.r.buf.Bytes()
 	if len(res) != len(payload) {
 		t.Error("payload and log lengths aren't match")
@@ -131,10 +131,10 @@ func TestLoggerRead(t *testing.T) {
 
 func TestLoggerWrite(t *testing.T) {
 	var c mockConn
-	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate),false, 3*time.Second)
+	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
 	_ = conn.prepareWrite()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	_, _ = conn.write(payload)
+	_, _ = conn.w.Write(payload)
 	res := conn.w.buf.Bytes()
 	if len(payload) != len(res) {
 		t.Error("payload and log lengths aren't match")
@@ -148,13 +148,13 @@ func TestLoggerWrite(t *testing.T) {
 
 func TestLoggerReadReset(t *testing.T) {
 	var c mockConn
-	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate),false, 3*time.Second)
+	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
 	_ = conn.prepareRead()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	c.rBuf.Write(payload)
 	res := make([]byte, len(payload))
 	_ = conn.prepareRead()
-	_, _ = conn.read(res)
+	_, _ = conn.r.Read(res)
 	res = conn.r.buf.Bytes()
 	if len(res) != len(payload) {
 		t.Error("payload and log lengths aren't match")
@@ -168,10 +168,10 @@ func TestLoggerReadReset(t *testing.T) {
 
 func TestLoggerWriteReset(t *testing.T) {
 	var c mockConn
-	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate),false, 3*time.Second)
+	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
 	_ = conn.prepareWrite()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	_, _ = conn.write(payload)
+	_, _ = conn.w.Write(payload)
 	res := conn.w.buf.Bytes()
 	if len(payload) != len(res) {
 		t.Error("payload and log lengths aren't match")
