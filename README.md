@@ -1,4 +1,4 @@
-A wrapper client for meters that communicates using IEC 62056-21 protocol.
+IEC 62056-21 communication protocol implementation.
 ====
 
 [![Coverage Status](https://coveralls.io/repos/github/srgsf/iec62056.golang/badge.svg)](https://coveralls.io/github/srgsf/iec62056.golang)
