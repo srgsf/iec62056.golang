@@ -372,7 +372,7 @@ func writeMessage(c *Conn, data []byte) (err error) {
 	if err != nil {
 		return
 	}
-	err = c.w.Flush()
+	err = c.flush()
 	if err != nil {
 		c.logRequest()
 	}

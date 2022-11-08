@@ -277,18 +277,3 @@ func decodeMode(b byte) ProtocolMode {
 	return ModeA
 }
 
-func decodeBaudRate(b byte) int {
-	switch b {
-	case 'A', '1':
-		return 600
-	case 'B', '2':
-		return 1200
-	case 'C', '3':
-		return 2400
-	case 'D', '4':
-		return 4800
-	case 'E', '5':
-		return 9600
-	}
-	return 300
-}
