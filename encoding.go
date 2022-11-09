@@ -187,7 +187,7 @@ func (dl *DataLine) UnmarshalBinary(data []byte) error {
 		}
 		return 0, nil, nil
 	})
-	var rv DataLine
+	*dl = DataLine{}
 	for s.Scan() {
 		if s.Err() != nil {
 			return s.Err()
@@ -196,15 +196,14 @@ func (dl *DataLine) UnmarshalBinary(data []byte) error {
 		if err := ds.UnmarshalBinary(s.Bytes()); err != nil {
 			return err
 		}
-		rv.Sets = append(rv.Sets, ds)
+		dl.Sets = append(dl.Sets, ds)
 	}
-	*dl = rv
 	return nil
 }
 
 func (db *DataBlock) UnmarshalBinary(data []byte) error {
 	s := bufio.NewScanner(bytes.NewReader(data))
-	var rv DataBlock
+	*db = DataBlock{}
 	for s.Scan() {
 		if s.Err() != nil {
 			return s.Err()
@@ -213,9 +212,8 @@ func (db *DataBlock) UnmarshalBinary(data []byte) error {
 		if err := dl.UnmarshalBinary(s.Bytes()); err != nil {
 			return err
 		}
-		rv.Lines = append(rv.Lines, dl)
+		db.Lines = append(db.Lines, dl)
 	}
-	*db = rv
 	return nil
 }
 
@@ -276,4 +274,3 @@ func decodeMode(b byte) ProtocolMode {
 	}
 	return ModeA
 }
-

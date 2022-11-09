@@ -23,13 +23,27 @@ type TariffDevice struct {
 	//Timeout after device is reset from programming mode
 	IdleTimeout time.Duration
 	//TCP connection
-	Connection *Conn
+	connection *Conn
 	// state flag
 	programmingMode bool
 	// last request timestamp
 	lastActivity time.Time
 	// Identity message received on handshake
 	identity *Identity
+}
+
+func NewTariffDevice(conn *Conn, address string) *TariffDevice {
+	return &TariffDevice{
+		connection:  conn,
+		Address:     address,
+		IdleTimeout: defaultInactivityTo,
+	}
+}
+
+func (t *TariffDevice) SetConnection(conn *Conn) {
+	t.connection = conn
+	t.lastActivity = time.Time{}
+	t.programmingMode = false
 }
 
 func (t *TariffDevice) Identity() (Identity, error) {
@@ -42,7 +56,7 @@ func (t *TariffDevice) Identity() (Identity, error) {
 	return *t.identity, nil
 }
 
-func (t *TariffDevice) ReadOut(isModeD bool) (db DataBlock, err error) {
+func (t *TariffDevice) ReadOut(isModeD bool) (db *DataBlock, err error) {
 	if isModeD {
 		return t.modeDreadOut()
 	}
@@ -52,7 +66,7 @@ func (t *TariffDevice) ReadOut(isModeD bool) (db DataBlock, err error) {
 	}
 
 	if t.identity.Mode != ModeC {
-		return *data, nil
+		return data, nil
 	}
 	data, err = t.Option(OptionSelectMessage{
 		Option: DataReadOut,
@@ -61,7 +75,7 @@ func (t *TariffDevice) ReadOut(isModeD bool) (db DataBlock, err error) {
 	if err != nil {
 		return
 	}
-	return *data, nil
+	return data, nil
 }
 
 func (t *TariffDevice) Option(o OptionSelectMessage) (db *DataBlock, err error) {
@@ -91,11 +105,16 @@ func (t *TariffDevice) Option(o OptionSelectMessage) (db *DataBlock, err error) 
 		err = t.passExchange(data)
 		return
 	}
-	err = db.UnmarshalBinary(data)
+	var rv DataBlock
+	err = rv.UnmarshalBinary(data)
+	if err != nil {
+		return
+	}
+	db = &rv
 	return
 }
 
-func (t *TariffDevice) Command(cmd Command) (rs DataBlock, err error) {
+func (t *TariffDevice) Command(cmd Command) (rs *DataBlock, err error) {
 	if !t.isInProgrammingMode() {
 		if cmd.Id == CmdB0 {
 			return
@@ -120,12 +139,17 @@ func (t *TariffDevice) Command(cmd Command) (rs DataBlock, err error) {
 	if err != nil {
 		return
 	}
-	err = rs.UnmarshalBinary(data)
+	var db DataBlock
+	err = db.UnmarshalBinary(data)
+	if err != nil {
+		return
+	}
+	rs = &db
 	return
 }
 
 func (t *TariffDevice) SendBreak() error {
-	err := writeMessage(t.Connection, breakMsg)
+	err := writeMessage(t.connection, breakMsg)
 	t.identity = nil
 	t.programmingMode = false
 	return err
@@ -201,8 +225,8 @@ func (t *TariffDevice) passExchange(p []byte) error {
 	return ErrInvalidPassword
 }
 
-func (t *TariffDevice) modeDreadOut() (db DataBlock, err error) {
-	data, err := readMessage(t.Connection)
+func (t *TariffDevice) modeDreadOut() (db *DataBlock, err error) {
+	data, err := readMessage(t.connection)
 	if err != nil {
 		return
 	}
@@ -212,22 +236,25 @@ func (t *TariffDevice) modeDreadOut() (db DataBlock, err error) {
 		return
 	}
 	id.Mode = ModeD
-	data, err = readMessage(t.Connection)
+	data, err = readMessage(t.connection)
 	if err != nil {
 		return
 	}
 
 	if len(data) == 2 {
-		data, err = readMessage(t.Connection)
+		data, err = readMessage(t.connection)
 		if err != nil {
 			return
 		}
 	}
-	err = db.UnmarshalBinary(data)
+	var b DataBlock
+
+	err = b.UnmarshalBinary(data)
 	if err != nil {
 		return
 	}
 	t.identity = &id
+	db = &b
 	return
 }
 
@@ -263,27 +290,29 @@ func (t *TariffDevice) handShake() (db *DataBlock, err error) {
 		return
 	}
 	// for ModeB there should be baudRate change, but we support tcp only.
-	data, err = readMessage(t.Connection)
+	data, err = readMessage(t.connection)
 	if err != nil {
 		return
 	}
 	t.lastActivity = time.Now()
 	t.programmingMode = true
-	err = db.UnmarshalBinary(data)
+	var b DataBlock
+	err = b.UnmarshalBinary(data)
 	if err != nil {
 		return
 	}
 	t.identity = &id
+	db = &b
 	return
 }
 
 func (t *TariffDevice) cmd(p []byte) (data []byte, err error) {
 	for i := 0; i < 5; i++ {
-		err = writeMessage(t.Connection, p)
+		err = writeMessage(t.connection, p)
 		if err != nil {
 			return
 		}
-		data, err = readMessage(t.Connection)
+		data, err = readMessage(t.connection)
 		if err == nil {
 			t.lastActivity = time.Now()
 			return
