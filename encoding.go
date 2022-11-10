@@ -122,7 +122,7 @@ type Identity struct {
 	bri          byte
 }
 
-func (ds *DataSet) MarshalBinary() (data []byte, err error) {
+func (ds *DataSet) MarshalBinary() ([]byte, error) {
 	length := len(ds.Address)
 	length += len(ds.Value)
 	unitLen := len(ds.Unit)
@@ -217,7 +217,7 @@ func (db *DataBlock) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (c *Command) MarshalBinary() (data []byte, err error) {
+func (c *Command) MarshalBinary() ([]byte, error) {
 	var plLen int
 	var pl []byte
 	if c.Payload != nil {
@@ -237,11 +237,11 @@ func (c *Command) MarshalBinary() (data []byte, err error) {
 	return append(rv, etx), nil
 }
 
-func (o *OptionSelectMessage) MarshalBinary() (data []byte, err error) {
+func (o *OptionSelectMessage) MarshalBinary() ([]byte, error) {
 	return []byte{ack, byte(o.PCC), o.bri, byte(o.Option)}, nil
 }
 
-func (address requestMessage) MarshalBinary() (data []byte, err error) {
+func (address requestMessage) MarshalBinary() ([]byte, error) {
 	l := len(address)
 	if l == 0 {
 		return []byte{start, trc, end}, nil

@@ -56,13 +56,13 @@ func (t *TariffDevice) Identity() (Identity, error) {
 	return *t.identity, nil
 }
 
-func (t *TariffDevice) ReadOut(isModeD bool) (db *DataBlock, err error) {
+func (t *TariffDevice) ReadOut(isModeD bool) (*DataBlock, error) {
 	if isModeD {
 		return t.modeDreadOut()
 	}
 	data, err := t.handShake()
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	if t.identity.Mode != ModeC {
@@ -73,79 +73,76 @@ func (t *TariffDevice) ReadOut(isModeD bool) (db *DataBlock, err error) {
 		PCC:    NormalPCC,
 	})
 	if err != nil {
-		return
+		return nil, err
 	}
 	return data, nil
 }
 
-func (t *TariffDevice) Option(o OptionSelectMessage) (db *DataBlock, err error) {
+func (t *TariffDevice) Option(o OptionSelectMessage) (*DataBlock, error) {
 	if t.identity == nil || t.isInProgrammingMode() {
-		_, err = t.handShake()
+		_, err := t.handShake()
 		if err != nil {
-			return
+			return nil, err
 		}
 	}
 	if t.identity.Mode != ModeC {
-		err = errors.New("Option selection is available for Mode C only")
-		return
+		err := errors.New("Option selection is available for Mode C only")
+		return nil, err
 	}
 	o.bri = t.identity.bri
 	data, err := o.MarshalBinary()
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	t.programmingMode = false
 	data, err = t.cmd(data)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	if o.Option == ProgrammingMode {
 		err = t.passExchange(data)
-		return
+		return nil, err
 	}
 	var rv DataBlock
 	err = rv.UnmarshalBinary(data)
 	if err != nil {
-		return
+		return nil, err
 	}
-	db = &rv
-	return
+	return &rv, nil
 }
 
-func (t *TariffDevice) Command(cmd Command) (rs *DataBlock, err error) {
+func (t *TariffDevice) Command(cmd Command) (*DataBlock, error) {
 	if !t.isInProgrammingMode() {
 		if cmd.Id == CmdB0 {
-			return
+			return nil, nil
 		}
 
-		err = t.enterProgrammingMode()
+		err := t.enterProgrammingMode()
 		if err != nil {
-			return
+			return nil, err
 		}
 	}
 
 	if cmd.Id == CmdB0 {
-		err = t.SendBreak()
-		return
+		return nil, t.SendBreak()
 	}
 
 	data, err := cmd.MarshalBinary()
 	if err != nil {
-		return
+		return nil, err
 	}
 	data, err = t.cmd(data)
 	if err != nil {
-		return
+		return nil, err
 	}
 	var db DataBlock
 	err = db.UnmarshalBinary(data)
 	if err != nil {
-		return
+		return nil, err
 	}
-	rs = &db
-	return
+	return &db, nil
 }
 
 func (t *TariffDevice) SendBreak() error {
@@ -225,37 +222,36 @@ func (t *TariffDevice) passExchange(p []byte) error {
 	return ErrInvalidPassword
 }
 
-func (t *TariffDevice) modeDreadOut() (db *DataBlock, err error) {
+func (t *TariffDevice) modeDreadOut() (*DataBlock, error) {
 	data, err := readMessage(t.connection)
 	if err != nil {
-		return
+		return nil, err
 	}
 	var id Identity
 	err = id.UnmarshalBinary(data)
 	if err != nil {
-		return
+		return nil, err
 	}
 	id.Mode = ModeD
 	data, err = readMessage(t.connection)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	if len(data) == 2 {
 		data, err = readMessage(t.connection)
 		if err != nil {
-			return
+			return nil, err
 		}
 	}
 	var b DataBlock
 
 	err = b.UnmarshalBinary(data)
 	if err != nil {
-		return
+		return nil, err
 	}
 	t.identity = &id
-	db = &b
-	return
+	return &b, nil
 }
 
 func (t *TariffDevice) isInProgrammingMode() bool {
@@ -271,60 +267,58 @@ func (t *TariffDevice) isInProgrammingMode() bool {
 	return t.programmingMode
 }
 
-func (t *TariffDevice) handShake() (db *DataBlock, err error) {
+func (t *TariffDevice) handShake() (*DataBlock, error) {
 	t.identity = nil
 	t.programmingMode = false
 
 	data, _ := requestMessage(t.Address).MarshalBinary()
-	data, err = t.cmd(data)
+	data, err := t.cmd(data)
 	if err != nil {
-		return
+		return nil, err
 	}
 	var id Identity
 	err = id.UnmarshalBinary(data)
 	if err != nil {
-		return
+		return nil, err
 	}
 	if id.Mode == ModeC {
 		t.identity = &id
-		return
+		return nil, nil
 	}
 	// for ModeB there should be baudRate change, but we support tcp only.
 	data, err = readMessage(t.connection)
 	if err != nil {
-		return
+		return nil, err
 	}
 	t.lastActivity = time.Now()
 	t.programmingMode = true
 	var b DataBlock
 	err = b.UnmarshalBinary(data)
 	if err != nil {
-		return
+		return nil, err
 	}
 	t.identity = &id
-	db = &b
-	return
+	return &b, err
 }
 
-func (t *TariffDevice) cmd(p []byte) (data []byte, err error) {
+func (t *TariffDevice) cmd(p []byte) ([]byte, error) {
 	for i := 0; i < 5; i++ {
-		err = writeMessage(t.connection, p)
+		err := writeMessage(t.connection, p)
 		if err != nil {
-			return
+			return nil, err
 		}
-		data, err = readMessage(t.connection)
+		data, err := readMessage(t.connection)
 		if err == nil {
 			t.lastActivity = time.Now()
-			return
+			return data, nil
 		}
 
 		if err == ErrNAK {
 			continue
 		}
-		return
+		return nil, err
 	}
-	err = ErrNAK
-	return
+	return nil, ErrNAK
 }
 
 func readMessage(c *Conn) (data []byte, err error) {
@@ -374,23 +368,23 @@ func readMessage(c *Conn) (data []byte, err error) {
 	return
 }
 
-func writeMessage(c *Conn, data []byte) (err error) {
+func writeMessage(c *Conn, data []byte) error {
 	if len(data) == 0 {
-		return
+		return nil
 	}
 
 	if c == nil {
-		err = ErrNoConnection
-		return
+		return ErrNoConnection
 	}
 
-	if err = c.prepareWrite(); err != nil {
-		return
+	if err := c.prepareWrite(); err != nil {
+		return err
 	}
 
-	if _, err = c.w.Write(data); err != nil {
-		return
+	if _, err := c.w.Write(data); err != nil {
+		return err
 	}
+	var err error
 
 	switch data[0] {
 	case soh:
@@ -399,13 +393,13 @@ func writeMessage(c *Conn, data []byte) (err error) {
 		_, err = c.w.Write(crlf)
 	}
 	if err != nil {
-		return
+		return err
 	}
 	err = c.w.Flush()
 	if err == nil {
 		c.logRequest()
 	}
-	return
+	return err
 }
 
 // Calculates checksum

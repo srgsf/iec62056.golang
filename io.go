@@ -55,12 +55,12 @@ func (c *Conn) prepareWrite() error {
 
 // logs received frame
 func (c *Conn) logResponse() {
-	c.r.Log("response")
+	c.r.log("response")
 }
 
 // logs written frame
 func (c *Conn) logRequest() {
-	c.w.Log("request")
+	c.w.log("request")
 }
 
 // A Dialer contains options for connecting to a network.
@@ -77,17 +77,17 @@ type Dialer struct {
 
 // DialTCP connects to the tcp socket on the named network.
 // The socket has the form "host:port".
-func DialTCP(socket string) (c *Conn, err error) {
+func DialTCP(socket string) (*Conn, error) {
 	var d Dialer
 	return d.DialTCP(socket)
 }
 
 // DialTCP connects to the tcp socket on the named network.
 // The socket has the form "host:port".
-func (d *Dialer) DialTCP(socket string) (c *Conn, err error) {
+func (d *Dialer) DialTCP(socket string) (*Conn, error) {
 	conn, err := net.DialTimeout("tcp", socket, d.ConnectionTimeOut)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	var to = d.RWTimeOut
@@ -100,7 +100,7 @@ func (d *Dialer) DialTCP(socket string) (c *Conn, err error) {
 // creates connection.
 func newConn(conn net.Conn, log *log.Logger, swParity bool, to time.Duration) *Conn {
 	var l = &logger{
-		log: log,
+		l: log,
 	}
 	var io io.ReadWriter = conn
 	if swParity {
@@ -126,18 +126,18 @@ type parityWrapper struct {
 	io io.ReadWriter
 }
 
-func (w *parityWrapper) Read(p []byte) (n int, err error) {
-	n, err = w.io.Read(p)
+func (w *parityWrapper) Read(p []byte) (int, error) {
+	n, err := w.io.Read(p)
 	if err != nil {
-		return
+		return n, err
 	}
 	for i := 0; i < n; i++ {
 		p[i] &= 0x7f
 	}
-	return
+	return n, err
 }
 
-func (w *parityWrapper) Write(p []byte) (n int, err error) {
+func (w *parityWrapper) Write(p []byte) (int, error) {
 	p2 := make([]byte, len(p))
 	copy(p2, p)
 	for i, b := range p {
@@ -154,13 +154,13 @@ type logger struct {
 	// buffer for partial reads writes.
 	buf bytes.Buffer
 	// logger
-	log *log.Logger
+	l *log.Logger
 }
 
-// Log logs read or written frame. Contents are reset on prepareRead or prepareWrite methods call.
-func (l *logger) Log(prefix string) {
-	if l.log != nil {
-		l.log.Println(formatMsg(prefix, l.buf.Bytes()))
+// log logs read or written frame. Contents are reset on prepareRead or prepareWrite methods call.
+func (l *logger) log(prefix string) {
+	if l.l != nil {
+		l.l.Println(formatMsg(prefix, l.buf.Bytes()))
 	}
 	l.buf.Reset()
 }
@@ -179,33 +179,33 @@ func (b *reader) reset(r io.Reader) {
 
 // io.Reader interface implementation.
 // Read reads data into p and appends it to frame's log message.
-func (b *reader) Read(p []byte) (n int, err error) {
-	n, err = b.Reader.Read(p)
-	if err == nil && b.log != nil {
+func (b *reader) Read(p []byte) (int, error) {
+	n, err := b.Reader.Read(p)
+	if err == nil && b.l != nil {
 		_, err = b.logger.buf.Write(p)
 	}
-	return
+	return n, err
 }
 
 // bufio.Reader interface implementation.
 // ReadByte reads a byte and appends it to frame's log message.
-func (b *reader) ReadByte() (n byte, err error) {
-	n, err = b.Reader.ReadByte()
-	if err == nil && b.log != nil {
+func (b *reader) ReadByte() (byte, error) {
+	n, err := b.Reader.ReadByte()
+	if err == nil && b.l != nil {
 		_ = b.logger.buf.WriteByte(n)
 	}
-	return
+	return n, err
 }
 
 // bufio.Reader interface implementation.
 //
 //	ReadBytes reads until the first occurrence of delim in the input and appends returned data to log buffer.
-func (b *reader) ReadBytes(delim byte) (data []byte, err error) {
-	data, err = b.Reader.ReadBytes(delim)
-	if err == nil && b.log != nil {
+func (b *reader) ReadBytes(delim byte) ([]byte, error) {
+	data, err := b.Reader.ReadBytes(delim)
+	if err == nil && b.l != nil {
 		_, err = b.logger.buf.Write(data)
 	}
-	return
+	return data, err
 }
 
 // Buffered writer that logs written bytes
@@ -222,22 +222,22 @@ func (b *writer) reset(w io.Writer) {
 
 // io.Writer implementation.
 // Write writes data from p into the socket.
-func (b *writer) Write(p []byte) (nn int, err error) {
-	nn, err = b.Writer.Write(p)
-	if err == nil && b.log != nil {
+func (b *writer) Write(p []byte) (int, error) {
+	nn, err := b.Writer.Write(p)
+	if err == nil && b.l != nil {
 		_, err = b.logger.buf.Write(p)
 	}
-	return
+	return nn, err
 }
 
 // bufio.Writer implementation.
 // WriteByte writes a byte into the socket.
-func (b *writer) WriteByte(p byte) (err error) {
-	err = b.Writer.WriteByte(p)
-	if err == nil && b.log != nil {
+func (b *writer) WriteByte(p byte) error {
+	err := b.Writer.WriteByte(p)
+	if err == nil && b.l != nil {
 		_ = b.logger.buf.WriteByte(p)
 	}
-	return
+	return err
 }
 
 // formats frame log as two areas. On the left side frame bytes as hex bytes, on the right is a string representation.
