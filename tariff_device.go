@@ -46,6 +46,13 @@ func (t *TariffDevice) SetConnection(conn *Conn) {
 	t.programmingMode = false
 }
 
+func (t *TariffDevice) Disconnect() {
+	if t.connection != nil {
+		t.connection.Close()
+		t.connection = nil
+	}
+}
+
 func (t *TariffDevice) Identity() (Identity, error) {
 	if t.identity != nil {
 		return *t.identity, nil
@@ -321,51 +328,54 @@ func (t *TariffDevice) cmd(p []byte) ([]byte, error) {
 	return nil, ErrNAK
 }
 
-func readMessage(c *Conn) (data []byte, err error) {
+func readMessage(c *Conn) ([]byte, error) {
 	if c == nil {
-		err = ErrNoConnection
-		return
-	}
-	defer func() {
-		if err == nil {
-			c.logResponse()
-		}
-	}()
-	if err = c.prepareRead(); err != nil {
-		return
+		err := ErrNoConnection
+		return nil, err
 	}
 
-	head, err := c.r.ReadByte()
-	if err != nil {
-		return
-	}
-	var delimiter byte
-	switch head {
-	case nak:
-		err = ErrNAK
-		fallthrough
-	case ack:
-		return []byte{head}, nil
-	case stx, soh:
-		delimiter = etx // only full blocks are supported
-	default:
-		delimiter = lf
-	}
-	data, err = c.r.ReadBytes(delimiter)
-	if err != nil {
-		return
+	if err := c.prepareRead(); err != nil {
+		return nil, err
 	}
 
-	if delimiter == etx {
-		check, errRead := c.r.ReadByte()
-		if errRead != nil {
-			return nil, errRead
+	data, err := func(c *Conn) ([]byte, error) {
+		head, err := c.r.ReadByte()
+		if err != nil {
+			return nil, err
 		}
-		if check != bcc(data) {
-			err = ErrBCC
+		var delimiter byte
+		switch head {
+		case nak:
+			err = ErrNAK
+			fallthrough
+		case ack:
+			return []byte{head}, err
+		case stx, soh:
+			delimiter = etx // only full blocks are supported
+		default:
+			delimiter = lf
 		}
+		data, err := c.r.ReadBytes(delimiter)
+		if err != nil {
+			return nil, err
+		}
+
+		if delimiter == etx {
+			check, errRead := c.r.ReadByte()
+			if errRead != nil {
+				return nil, errRead
+			}
+			if check != bcc(data) {
+				err = ErrBCC
+			}
+		}
+		return data, err
+	}(c)
+
+	if err == nil {
+		c.logResponse()
 	}
-	return
+	return data, err
 }
 
 func writeMessage(c *Conn, data []byte) error {
