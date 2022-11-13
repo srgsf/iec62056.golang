@@ -16,8 +16,33 @@ import (
 // default i/o frame operations timeout
 const timeout = time.Second * 5
 
-// Conn is a network connection handle
-type Conn struct {
+type Conn interface {
+	// PrepareWrite configures frame writing operation. Call it once before frame sequential writes.
+	PrepareWrite() error
+	// PrepareRead configures frame reading operation. Call it once before frame sequential reads.
+	PrepareRead() error
+	// logs written frame
+	LogRequest()
+	// logs received frame
+	LogResponse()
+	// ReadByte reads a byte and appends it to frame's log message.
+	ReadByte() (byte, error)
+	//	ReadBytes reads until the first occurrence of delim in the input and appends returned data to log buffer.
+	ReadBytes(delim byte) ([]byte, error)
+	// Write writes data from p into the socket.
+	Write(data []byte) (int, error)
+	// WriteByte writes a byte into the socket.
+	WriteByte(data byte) error
+	// Flush writes any buffered data to the underlying io.Writer.
+	Flush() error
+	//SetBaudRate sets new baudRate for a connection. Does nothing for tcp.
+	SetBaudRate(int) error
+	// Close closes the connection.
+	Close() error
+}
+
+// tcpConn is a network connection handle
+type tcpConn struct {
 	// wrapped connection
 	rwc net.Conn
 	// operations wrapper
@@ -30,13 +55,11 @@ type Conn struct {
 	w writer
 }
 
-// Close closes the connection.
-func (c *Conn) Close() error {
+func (c *tcpConn) Close() error {
 	return c.rwc.Close()
 }
 
-// prepareRead configures frame reading operation. Call it once before frame sequential reads.
-func (c *Conn) prepareRead() error {
+func (c *tcpConn) PrepareRead() error {
 	c.r.reset(c.io)
 	if err := c.rwc.SetReadDeadline(time.Now().Add(c.to)); err != nil {
 		return err
@@ -44,8 +67,7 @@ func (c *Conn) prepareRead() error {
 	return nil
 }
 
-// prepareWrite configures frame writing operation. Call it once before frame sequential writes.
-func (c *Conn) prepareWrite() error {
+func (c *tcpConn) PrepareWrite() error {
 	c.w.reset(c.io)
 	if err := c.rwc.SetWriteDeadline(time.Now().Add(c.to)); err != nil {
 		return err
@@ -53,18 +75,41 @@ func (c *Conn) prepareWrite() error {
 	return nil
 }
 
-// logs received frame
-func (c *Conn) logResponse() {
+func (c *tcpConn) LogResponse() {
 	c.r.log("response")
 }
 
-// logs written frame
-func (c *Conn) logRequest() {
+func (c *tcpConn) LogRequest() {
 	c.w.log("request")
 }
 
-// A Dialer contains options for connecting to a network.
-type Dialer struct {
+func (c *tcpConn) ReadByte() (byte, error) {
+	return c.r.ReadByte()
+}
+
+func (c *tcpConn) ReadBytes(delim byte) ([]byte, error) {
+	return c.r.ReadBytes(delim)
+}
+
+func (c *tcpConn) Write(data []byte) (int, error) {
+	return c.w.Write(data)
+}
+
+func (c *tcpConn) WriteByte(data byte) error {
+	return c.w.WriteByte(data)
+}
+
+func (c *tcpConn) Flush() error {
+	return c.w.Flush()
+}
+
+func (c *tcpConn) SetBaudRate(int) error {
+	//nothing to do for tcp connection
+	return nil
+}
+
+// A TCPDialer contains options for connecting to a network.
+type TCPDialer struct {
 	// Tcp socket connection timeout.
 	ConnectionTimeOut time.Duration
 	// I/O frame operations timeout.
@@ -77,14 +122,14 @@ type Dialer struct {
 
 // DialTCP connects to the tcp socket on the named network.
 // The socket has the form "host:port".
-func DialTCP(socket string) (*Conn, error) {
-	var d Dialer
-	return d.DialTCP(socket)
+func DialTCP(socket string) (Conn, error) {
+	var d TCPDialer
+	return d.Dial(socket)
 }
 
-// DialTCP connects to the tcp socket on the named network.
+// Dial connects to the tcp socket on the named network.
 // The socket has the form "host:port".
-func (d *Dialer) DialTCP(socket string) (*Conn, error) {
+func (d *TCPDialer) Dial(socket string) (Conn, error) {
 	conn, err := net.DialTimeout("tcp", socket, d.ConnectionTimeOut)
 	if err != nil {
 		return nil, err
@@ -98,7 +143,7 @@ func (d *Dialer) DialTCP(socket string) (*Conn, error) {
 }
 
 // creates connection.
-func newConn(conn net.Conn, log *log.Logger, swParity bool, to time.Duration) *Conn {
+func newConn(conn net.Conn, log *log.Logger, swParity bool, to time.Duration) *tcpConn {
 	var l = &logger{
 		l: log,
 	}
@@ -107,7 +152,7 @@ func newConn(conn net.Conn, log *log.Logger, swParity bool, to time.Duration) *C
 		io = &parityWrapper{io: conn}
 	}
 
-	return &Conn{
+	return &tcpConn{
 		conn,
 		io,
 		to,
@@ -188,7 +233,6 @@ func (b *reader) Read(p []byte) (int, error) {
 }
 
 // bufio.Reader interface implementation.
-// ReadByte reads a byte and appends it to frame's log message.
 func (b *reader) ReadByte() (byte, error) {
 	n, err := b.Reader.ReadByte()
 	if err == nil && b.l != nil {
@@ -198,8 +242,6 @@ func (b *reader) ReadByte() (byte, error) {
 }
 
 // bufio.Reader interface implementation.
-//
-//	ReadBytes reads until the first occurrence of delim in the input and appends returned data to log buffer.
 func (b *reader) ReadBytes(delim byte) ([]byte, error) {
 	data, err := b.Reader.ReadBytes(delim)
 	if err == nil && b.l != nil {
@@ -221,7 +263,6 @@ func (b *writer) reset(w io.Writer) {
 }
 
 // io.Writer implementation.
-// Write writes data from p into the socket.
 func (b *writer) Write(p []byte) (int, error) {
 	nn, err := b.Writer.Write(p)
 	if err == nil && b.l != nil {
@@ -231,7 +272,6 @@ func (b *writer) Write(p []byte) (int, error) {
 }
 
 // bufio.Writer implementation.
-// WriteByte writes a byte into the socket.
 func (b *writer) WriteByte(p byte) error {
 	err := b.Writer.WriteByte(p)
 	if err == nil && b.l != nil {

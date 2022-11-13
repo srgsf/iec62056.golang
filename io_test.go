@@ -61,7 +61,7 @@ func TestSetReadTimeout(t *testing.T) {
 	conn := newConn(&c, nil, false, rdl)
 	c.readDeadLine = time.Time{}
 	tt := time.Now().Add(rdl).Round(round)
-	_ = conn.prepareRead()
+	_ = conn.PrepareRead()
 	dd := c.readDeadLine.Round(round)
 	if dd != tt {
 		t.Error("frame read deadline is not properly set")
@@ -75,7 +75,7 @@ func TestSetWriteTimeout(t *testing.T) {
 	conn := newConn(&c, nil, false, wdl)
 	c.writeDeadLine = time.Time{}
 	tt := time.Now().Add(wdl).Round(round)
-	_ = conn.prepareWrite()
+	_ = conn.PrepareWrite()
 	dd := c.writeDeadLine.Round(round)
 	if dd != tt {
 		t.Error("frame write deadline is not properly set")
@@ -85,11 +85,11 @@ func TestSetWriteTimeout(t *testing.T) {
 func TestNoLoggerRead(t *testing.T) {
 	var c mockConn
 	conn := newConn(&c, nil, false, 3*time.Second)
-	_ = conn.prepareRead()
+	_ = conn.PrepareRead()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	c.rBuf.Write(payload)
 	res := make([]byte, len(payload))
-	_ = conn.prepareRead()
+	_ = conn.PrepareRead()
 	_, _ = conn.r.Read(res)
 	res = conn.r.buf.Bytes()
 	if len(res) != 0 {
@@ -100,7 +100,7 @@ func TestNoLoggerRead(t *testing.T) {
 func TestNoLoggerWrite(t *testing.T) {
 	var c mockConn
 	conn := newConn(&c, nil, false, 3*time.Second)
-	_ = conn.prepareWrite()
+	_ = conn.PrepareWrite()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	_, _ = conn.w.Write(payload)
 	res := conn.w.buf.Bytes()
@@ -112,11 +112,11 @@ func TestNoLoggerWrite(t *testing.T) {
 func TestLoggerRead(t *testing.T) {
 	var c mockConn
 	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
-	_ = conn.prepareRead()
+	_ = conn.PrepareRead()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	c.rBuf.Write(payload)
 	res := make([]byte, len(payload))
-	_ = conn.prepareRead()
+	_ = conn.PrepareRead()
 	_, _ = conn.r.Read(res)
 	res = conn.r.buf.Bytes()
 	if len(res) != len(payload) {
@@ -132,7 +132,7 @@ func TestLoggerRead(t *testing.T) {
 func TestLoggerWrite(t *testing.T) {
 	var c mockConn
 	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
-	_ = conn.prepareWrite()
+	_ = conn.PrepareWrite()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	_, _ = conn.w.Write(payload)
 	res := conn.w.buf.Bytes()
@@ -149,17 +149,17 @@ func TestLoggerWrite(t *testing.T) {
 func TestLoggerReadReset(t *testing.T) {
 	var c mockConn
 	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
-	_ = conn.prepareRead()
+	_ = conn.PrepareRead()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	c.rBuf.Write(payload)
 	res := make([]byte, len(payload))
-	_ = conn.prepareRead()
+	_ = conn.PrepareRead()
 	_, _ = conn.r.Read(res)
 	res = conn.r.buf.Bytes()
 	if len(res) != len(payload) {
 		t.Error("payload and log lengths aren't match")
 	}
-	_ = conn.prepareRead()
+	_ = conn.PrepareRead()
 	res = conn.r.buf.Bytes()
 	if len(res) != 0 {
 		t.Error("frame isn't reset")
@@ -169,14 +169,14 @@ func TestLoggerReadReset(t *testing.T) {
 func TestLoggerWriteReset(t *testing.T) {
 	var c mockConn
 	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
-	_ = conn.prepareWrite()
+	_ = conn.PrepareWrite()
 	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	_, _ = conn.w.Write(payload)
 	res := conn.w.buf.Bytes()
 	if len(payload) != len(res) {
 		t.Error("payload and log lengths aren't match")
 	}
-	_ = conn.prepareWrite()
+	_ = conn.PrepareWrite()
 	res = conn.w.buf.Bytes()
 	if len(res) != 0 {
 		t.Error("frame isn't reset")

@@ -16,14 +16,14 @@ type PasswordFunc func(arg DataSet) (DataSet, CommandId)
 
 // TariffDevice is a client that communicates using IEC-62056-21 protocol.
 type TariffDevice struct {
-	// Device address
-	Address string
-	// Password callback
-	Pass PasswordFunc
 	//Timeout after device is reset from programming mode
 	IdleTimeout time.Duration
+	// Device address
+	address string
+	// Password callback
+	pass PasswordFunc
 	//TCP connection
-	connection *Conn
+	connection Conn
 	// state flag
 	programmingMode bool
 	// last request timestamp
@@ -32,24 +32,20 @@ type TariffDevice struct {
 	identity *Identity
 }
 
-func NewTariffDevice(conn *Conn, address string) *TariffDevice {
+func NewTariffDevice(conn Conn) *TariffDevice {
+	return WithPassword(conn, "", nil)
+}
+
+func WithAddress(conn Conn, address string) *TariffDevice {
+	return WithPassword(conn, address, nil)
+}
+
+func WithPassword(conn Conn, address string, passCallback PasswordFunc) *TariffDevice {
 	return &TariffDevice{
 		connection:  conn,
-		Address:     address,
+		address:     address,
+		pass:        passCallback,
 		IdleTimeout: defaultInactivityTo,
-	}
-}
-
-func (t *TariffDevice) SetConnection(conn *Conn) {
-	t.connection = conn
-	t.lastActivity = time.Time{}
-	t.programmingMode = false
-}
-
-func (t *TariffDevice) Disconnect() {
-	if t.connection != nil {
-		t.connection.Close()
-		t.connection = nil
 	}
 }
 
@@ -76,8 +72,9 @@ func (t *TariffDevice) ReadOut(isModeD bool) (*DataBlock, error) {
 		return data, nil
 	}
 	data, err = t.Option(OptionSelectMessage{
-		Option: DataReadOut,
-		PCC:    NormalPCC,
+		Option:        DataReadOut,
+		PCC:           NormalPCC,
+		skipHandShake: true,
 	})
 	if err != nil {
 		return nil, err
@@ -86,7 +83,7 @@ func (t *TariffDevice) ReadOut(isModeD bool) (*DataBlock, error) {
 }
 
 func (t *TariffDevice) Option(o OptionSelectMessage) (*DataBlock, error) {
-	if t.identity == nil || t.isInProgrammingMode() {
+	if !o.skipHandShake {
 		_, err := t.handShake()
 		if err != nil {
 			return nil, err
@@ -103,10 +100,18 @@ func (t *TariffDevice) Option(o OptionSelectMessage) (*DataBlock, error) {
 	}
 
 	t.programmingMode = false
-	data, err = t.cmd(data)
+	if err := writeMessage(t.connection, data); err != nil {
+		return nil, err
+	}
+	if err := t.connection.SetBaudRate(decodeBaudRate(t.identity.bri)); err != nil {
+		return nil, err
+	}
+
+	data, err = readMessage(t.connection)
 	if err != nil {
 		return nil, err
 	}
+	t.lastActivity = time.Now()
 
 	if o.Option == ProgrammingMode {
 		err = t.passExchange(data)
@@ -160,23 +165,21 @@ func (t *TariffDevice) SendBreak() error {
 }
 
 func (t *TariffDevice) enterProgrammingMode() error {
-	var noIdentity = t.identity == nil
-	if noIdentity {
-		_, err := t.handShake()
-		if err != nil {
-			return err
-		}
+	_, err := t.handShake()
+	if err != nil {
+		return err
 	}
 	if t.identity.Mode == ModeC {
 		_, err := t.Option(OptionSelectMessage{
-			Option: ProgrammingMode,
-			PCC:    NormalPCC,
-			bri:    t.identity.bri,
+			Option:        ProgrammingMode,
+			PCC:           NormalPCC,
+			bri:           t.identity.bri,
+			skipHandShake: true,
 		})
 		return err
 	}
 
-	if t.Pass == nil || t.identity.Mode != ModeB {
+	if t.pass == nil || t.identity.Mode != ModeB {
 		return nil
 	}
 	ds := DataSet{
@@ -195,11 +198,11 @@ func (t *TariffDevice) passExchange(p []byte) error {
 		return err
 	}
 
-	if t.Pass == nil {
+	if t.pass == nil {
 		t.programmingMode = true
 		return nil
 	}
-	rv, cmd := t.Pass(ds)
+	rv, cmd := t.pass(ds)
 
 	passCmd := &Command{
 		Id:      cmd,
@@ -230,6 +233,9 @@ func (t *TariffDevice) passExchange(p []byte) error {
 }
 
 func (t *TariffDevice) modeDreadOut() (*DataBlock, error) {
+	if err := t.connection.SetBaudRate(2400); err != nil {
+		return nil, err
+	}
 	data, err := readMessage(t.connection)
 	if err != nil {
 		return nil, err
@@ -277,8 +283,11 @@ func (t *TariffDevice) isInProgrammingMode() bool {
 func (t *TariffDevice) handShake() (*DataBlock, error) {
 	t.identity = nil
 	t.programmingMode = false
+	if err := t.connection.SetBaudRate(300); err != nil {
+		return nil, err
+	}
 
-	data, _ := requestMessage(t.Address).MarshalBinary()
+	data, _ := requestMessage(t.address).MarshalBinary()
 	data, err := t.cmd(data)
 	if err != nil {
 		return nil, err
@@ -292,10 +301,20 @@ func (t *TariffDevice) handShake() (*DataBlock, error) {
 		t.identity = &id
 		return nil, nil
 	}
-	// for ModeB there should be baudRate change, but we support tcp only.
+	if id.Mode == ModeB {
+		if err = t.connection.SetBaudRate(decodeBaudRate(id.bri)); err != nil {
+			return nil, err
+		}
+	}
 	data, err = readMessage(t.connection)
 	if err != nil {
 		return nil, err
+	}
+
+	if id.Mode == ModeB {
+		if err = t.connection.SetBaudRate(300); err != nil {
+			return nil, err
+		}
 	}
 	t.lastActivity = time.Now()
 	t.programmingMode = true
@@ -328,18 +347,18 @@ func (t *TariffDevice) cmd(p []byte) ([]byte, error) {
 	return nil, ErrNAK
 }
 
-func readMessage(c *Conn) ([]byte, error) {
+func readMessage(c Conn) ([]byte, error) {
 	if c == nil {
 		err := ErrNoConnection
 		return nil, err
 	}
 
-	if err := c.prepareRead(); err != nil {
+	if err := c.PrepareRead(); err != nil {
 		return nil, err
 	}
 
-	data, err := func(c *Conn) ([]byte, error) {
-		head, err := c.r.ReadByte()
+	data, err := func(c Conn) ([]byte, error) {
+		head, err := c.ReadByte()
 		if err != nil {
 			return nil, err
 		}
@@ -355,13 +374,13 @@ func readMessage(c *Conn) ([]byte, error) {
 		default:
 			delimiter = lf
 		}
-		data, err := c.r.ReadBytes(delimiter)
+		data, err := c.ReadBytes(delimiter)
 		if err != nil {
 			return nil, err
 		}
 
 		if delimiter == etx {
-			check, errRead := c.r.ReadByte()
+			check, errRead := c.ReadByte()
 			if errRead != nil {
 				return nil, errRead
 			}
@@ -373,12 +392,12 @@ func readMessage(c *Conn) ([]byte, error) {
 	}(c)
 
 	if err == nil {
-		c.logResponse()
+		c.LogResponse()
 	}
 	return data, err
 }
 
-func writeMessage(c *Conn, data []byte) error {
+func writeMessage(c Conn, data []byte) error {
 	if len(data) == 0 {
 		return nil
 	}
@@ -387,27 +406,27 @@ func writeMessage(c *Conn, data []byte) error {
 		return ErrNoConnection
 	}
 
-	if err := c.prepareWrite(); err != nil {
+	if err := c.PrepareWrite(); err != nil {
 		return err
 	}
 
-	if _, err := c.w.Write(data); err != nil {
+	if _, err := c.Write(data); err != nil {
 		return err
 	}
 	var err error
 
 	switch data[0] {
 	case soh:
-		err = c.w.WriteByte(bcc(data[1:]))
+		err = c.WriteByte(bcc(data[1:]))
 	case start, ack:
-		_, err = c.w.Write(crlf)
+		_, err = c.Write(crlf)
 	}
 	if err != nil {
 		return err
 	}
-	err = c.w.Flush()
+	err = c.Flush()
 	if err == nil {
-		c.logRequest()
+		c.LogRequest()
 	}
 	return err
 }
