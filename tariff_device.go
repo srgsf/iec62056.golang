@@ -49,6 +49,12 @@ func WithPassword(conn Conn, address string, passCallback PasswordFunc) *TariffD
 	}
 }
 
+func (t *TariffDevice) Reset(conn Conn) {
+	t.connection = conn
+	t.programmingMode = false
+	t.identity = nil
+}
+
 func (t *TariffDevice) Identity() (Identity, error) {
 	if t.identity != nil {
 		return *t.identity, nil
