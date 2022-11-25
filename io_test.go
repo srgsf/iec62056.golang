@@ -25,12 +25,12 @@ func Test_FixParity(t *testing.T) {
 	td := NewTariffDevice(client)
 	go func() {
 		buf := make([]byte, 10)
-		server.Read(buf)
+		_, _ = server.Read(buf)
 		resp := []byte("/ABC6dev\r\n")
 		for i := 0; i < len(resp); i++ {
 			resp[i] |= 0x80
 		}
-		server.Write(resp)
+		_, _ = server.Write(resp)
 		if !reflect.DeepEqual(buf[:5], []byte{175, 63, 33, 141, 10}) {
 			t.Error("Parity encoding failed")
 		}

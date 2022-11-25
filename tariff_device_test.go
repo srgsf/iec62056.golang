@@ -194,8 +194,8 @@ func TestTariffDevice_Identity(t *testing.T) {
 			},
 			setup: func() {
 				buf := make([]byte, 20)
-				server.Read(buf)
-				server.Write([]byte("/iek4test\r\n"))
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iek4test\r\n"))
 			},
 			wantErr: false,
 		},
@@ -241,14 +241,14 @@ func TestTariffDevice_ReadOut(t *testing.T) {
 			name: "ModeA",
 			fn: func(_ *testing.T) {
 				buf := make([]byte, 5)
-				server.Read(buf)
-				server.Write([]byte("/iekXtest\r\n"))
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iekXtest\r\n"))
 				var b bytes.Buffer
 				b.WriteString("Data()!\r\n")
 				b.WriteByte(etx)
-				server.Write([]byte{stx})
-				server.Write(b.Bytes())
-				server.Write([]byte{bcc(b.Bytes())})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(b.Bytes())
+				_, _ = server.Write([]byte{bcc(b.Bytes())})
 			},
 			want: &DataBlock{Lines: []DataLine{
 				{
@@ -264,14 +264,14 @@ func TestTariffDevice_ReadOut(t *testing.T) {
 			name: "ModeB",
 			fn: func(_ *testing.T) {
 				buf := make([]byte, 5)
-				server.Read(buf)
-				server.Write([]byte("/iekEtest\r\n"))
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iekEtest\r\n"))
 				var b bytes.Buffer
 				b.WriteString("Data(Val)!\r\n")
 				b.WriteByte(etx)
-				server.Write([]byte{stx})
-				server.Write(b.Bytes())
-				server.Write([]byte{bcc(b.Bytes())})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(b.Bytes())
+				_, _ = server.Write([]byte{bcc(b.Bytes())})
 			},
 			want: &DataBlock{Lines: []DataLine{
 				{
@@ -287,19 +287,19 @@ func TestTariffDevice_ReadOut(t *testing.T) {
 			name: "ModeC",
 			fn: func(t *testing.T) {
 				buf := make([]byte, 5)
-				server.Read(buf)
-				server.Write([]byte("/iek6test\r\n"))
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iek6test\r\n"))
 				buf = make([]byte, 6)
-				server.Read(buf)
+				_, _ = server.Read(buf)
 				if !reflect.DeepEqual(buf, []byte{ack, '0', '6', '0', cr, lf}) {
 					t.Fatalf("Invalid option message.")
 				}
 				var b bytes.Buffer
 				b.WriteString("Data(Val)!\r\n")
 				b.WriteByte(etx)
-				server.Write([]byte{stx})
-				server.Write(b.Bytes())
-				server.Write([]byte{bcc(b.Bytes())})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(b.Bytes())
+				_, _ = server.Write([]byte{bcc(b.Bytes())})
 			},
 			want: &DataBlock{Lines: []DataLine{
 				{
@@ -315,19 +315,19 @@ func TestTariffDevice_ReadOut(t *testing.T) {
 			name: "ModeC Error",
 			fn: func(t *testing.T) {
 				buf := make([]byte, 5)
-				server.Read(buf)
-				server.Write([]byte("/iek6test\r\n"))
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iek6test\r\n"))
 				buf = make([]byte, 6)
-				server.Read(buf)
+				_, _ = server.Read(buf)
 				if !reflect.DeepEqual(buf, []byte{ack, '0', '6', '0', cr, lf}) {
 					t.Fatalf("Invalid option message.")
 				}
 				var b bytes.Buffer
 				b.WriteString("Data(Val!\r\n")
 				b.WriteByte(etx)
-				server.Write([]byte{stx})
-				server.Write(b.Bytes())
-				server.Write([]byte{bcc(b.Bytes())})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(b.Bytes())
+				_, _ = server.Write([]byte{bcc(b.Bytes())})
 			},
 			want: &DataBlock{Lines: []DataLine{
 				{
@@ -343,8 +343,8 @@ func TestTariffDevice_ReadOut(t *testing.T) {
 			name: "handShake fail",
 			fn: func(_ *testing.T) {
 				buf := make([]byte, 5)
-				server.Read(buf)
-				server.Write([]byte("\r\n"))
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("\r\n"))
 			},
 			want: &DataBlock{Lines: []DataLine{
 				{
@@ -400,14 +400,14 @@ func TestTariffDevice_Option(t *testing.T) {
 			},
 			fn: func(_ *testing.T) {
 				buf := make([]byte, 5)
-				server.Read(buf)
-				server.Write([]byte("/iekAtest\r\n"))
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iekAtest\r\n"))
 				var b bytes.Buffer
 				b.WriteString("Data(Val)!\r\n")
 				b.WriteByte(etx)
-				server.Write([]byte{stx})
-				server.Write(b.Bytes())
-				server.Write([]byte{bcc(b.Bytes())})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(b.Bytes())
+				_, _ = server.Write([]byte{bcc(b.Bytes())})
 			},
 			want:    &DataBlock{},
 			wantErr: true,
@@ -422,19 +422,19 @@ func TestTariffDevice_Option(t *testing.T) {
 			},
 			fn: func(_ *testing.T) {
 				buf := make([]byte, 5)
-				server.Read(buf)
-				server.Write([]byte("/iek6test\r\n"))
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iek6test\r\n"))
 				buf = make([]byte, 6)
-				server.Read(buf)
+				_, _ = server.Read(buf)
 				if !reflect.DeepEqual(buf, []byte{ack, '0', '6', '6', cr, lf}) {
 					t.Fatalf("Invalid option message.")
 				}
 				var b bytes.Buffer
 				b.WriteString("Data(Val)!\r\n")
 				b.WriteByte(etx)
-				server.Write([]byte{stx})
-				server.Write(b.Bytes())
-				server.Write([]byte{bcc(b.Bytes())})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(b.Bytes())
+				_, _ = server.Write([]byte{bcc(b.Bytes())})
 			},
 			want: &DataBlock{Lines: []DataLine{
 				{
@@ -485,22 +485,6 @@ func TestTariffDevice_Command(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "Break",
-			fn: func(t *testing.T) {
-				l := len(breakMsg)
-				buf := make([]byte, l+2)
-				server.Read(buf)
-				if !reflect.DeepEqual(buf[:l], breakMsg) {
-					t.Error("Break message fail")
-				}
-			},
-			cmd: Command{
-				Id: CmdB0,
-			},
-			want:    nil,
-			wantErr: false,
-		},
-		{
 			name: "In programming mode",
 			fields: fields{
 				programmingMode: true,
@@ -511,11 +495,11 @@ func TestTariffDevice_Command(t *testing.T) {
 				var b bytes.Buffer
 				b.WriteString("Data(Val)!\r\n")
 				b.WriteByte(etx)
-				server.Write([]byte{stx})
-				server.Write(b.Bytes())
-				server.Write([]byte{bcc(b.Bytes())})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(b.Bytes())
+				_, _ = server.Write([]byte{bcc(b.Bytes())})
 				buf := make([]byte, 15)
-				server.Read(buf)
+				_, _ = server.Read(buf)
 			},
 			cmd: Command{
 				Id: CmdR1,
@@ -544,11 +528,11 @@ func TestTariffDevice_Command(t *testing.T) {
 				var b bytes.Buffer
 				b.WriteString("Data(Val\r\n")
 				b.WriteByte(etx)
-				server.Write([]byte{stx})
-				server.Write(b.Bytes())
-				server.Write([]byte{bcc(b.Bytes())})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(b.Bytes())
+				_, _ = server.Write([]byte{bcc(b.Bytes())})
 				buf := make([]byte, 15)
-				server.Read(buf)
+				_, _ = server.Read(buf)
 			},
 			cmd: Command{
 				Id: CmdR1,
@@ -575,20 +559,20 @@ func TestTariffDevice_Command(t *testing.T) {
 			},
 			fn: func(_ *testing.T) {
 				buf := make([]byte, 15)
-				server.Read(buf)
-				server.Write([]byte("/iek6test\r\n"))
-				server.Read(buf)
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iek6test\r\n"))
+				_, _ = server.Read(buf)
 				p0 := []byte{'P', '0', stx, fb, '1', '2', '3', rb, etx}
-				server.Write([]byte{soh})
-				server.Write(p0)
-				server.Write([]byte{bcc(p0)})
-				server.Read(buf)
+				_, _ = server.Write([]byte{soh})
+				_, _ = server.Write(p0)
+				_, _ = server.Write([]byte{bcc(p0)})
+				_, _ = server.Read(buf)
 				var b bytes.Buffer
 				b.WriteString("Data(Val)\r\n")
 				b.WriteByte(etx)
-				server.Write([]byte{stx})
-				server.Write(b.Bytes())
-				server.Write([]byte{bcc(b.Bytes())})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(b.Bytes())
+				_, _ = server.Write([]byte{bcc(b.Bytes())})
 			},
 			cmd: Command{
 				Id: CmdR1,
@@ -651,13 +635,13 @@ func TestTariffDevice_enterProgrammingMode(t *testing.T) {
 			},
 			fn: func() {
 				buf := make([]byte, 15)
-				server.Read(buf)
-				server.Write([]byte("/iek6test\r\n"))
-				server.Read(buf)
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iek6test\r\n"))
+				_, _ = server.Read(buf)
 				p0 := []byte{'P', '0', stx, fb, '1', '2', '3', rb, etx}
-				server.Write([]byte{soh})
-				server.Write(p0)
-				server.Write([]byte{bcc(p0)})
+				_, _ = server.Write([]byte{soh})
+				_, _ = server.Write(p0)
+				_, _ = server.Write([]byte{bcc(p0)})
 			},
 			wantErr: false,
 		},
@@ -668,13 +652,13 @@ func TestTariffDevice_enterProgrammingMode(t *testing.T) {
 				lastActivity: time.Now(),
 			},
 			fn: func() {
-				buf := make([]byte, 15)
-				server.Read(buf)
-				server.Write([]byte("/iekEtest\r\n"))
+				_, _ = server.Write([]byte("/iekEtest\r\n"))
 				p0 := []byte{'P', '0', stx, fb, '1', '2', '3', rb, etx}
-				server.Write([]byte{soh})
-				server.Write(p0)
-				server.Write([]byte{bcc(p0)})
+				_, _ = server.Write([]byte{soh})
+				_, _ = server.Write(p0)
+				_, _ = server.Write([]byte{bcc(p0)})
+				buf := make([]byte, 15)
+				_, _ = server.Read(buf)
 			},
 			wantErr: false,
 		},
@@ -688,15 +672,15 @@ func TestTariffDevice_enterProgrammingMode(t *testing.T) {
 			},
 			fn: func() {
 				buf := make([]byte, 15)
-				server.Read(buf)
-				server.Write([]byte("/iek6test\r\n"))
-				server.Read(buf)
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iek6test\r\n"))
+				_, _ = server.Read(buf)
 				p0 := []byte{'P', '0', stx, fb, '1', '2', '3', rb, etx}
-				server.Write([]byte{soh})
-				server.Write(p0)
-				server.Write([]byte{bcc(p0)})
-				server.Read(buf)
-				server.Write([]byte{ack})
+				_, _ = server.Write([]byte{soh})
+				_, _ = server.Write(p0)
+				_, _ = server.Write([]byte{bcc(p0)})
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte{ack})
 			},
 			wantErr: false,
 		},
@@ -709,16 +693,12 @@ func TestTariffDevice_enterProgrammingMode(t *testing.T) {
 				lastActivity: time.Now(),
 			},
 			fn: func() {
-				buf := make([]byte, 15)
-				server.Read(buf)
-				server.Write([]byte("/iekEtest\r\n"))
-				server.Read(buf)
+				_, _ = server.Write([]byte("/iekEtest\r\n"))
 				p0 := []byte{'P', '0', stx, fb, '1', '2', '3', rb, etx}
-				server.Write([]byte{soh})
-				server.Write(p0)
-				server.Write([]byte{bcc(p0)})
-				server.Read(buf)
-				server.Write([]byte{ack})
+				_, _ = server.Write([]byte{soh})
+				_, _ = server.Write(p0)
+				_, _ = server.Write([]byte{bcc(p0)})
+				_, _ = server.Write([]byte{ack})
 			},
 			wantErr: false,
 		},
@@ -732,15 +712,15 @@ func TestTariffDevice_enterProgrammingMode(t *testing.T) {
 			},
 			fn: func() {
 				buf := make([]byte, 15)
-				server.Read(buf)
-				server.Write([]byte("/iekEtest\r\n"))
-				server.Read(buf)
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iekEtest\r\n"))
+				_, _ = server.Read(buf)
 				p0 := []byte{'P', '0', stx, fb, '1', '2', '3', rb, etx}
-				server.Write([]byte{soh})
-				server.Write(p0)
-				server.Write([]byte{bcc(p0)})
-				server.Read(buf)
-				server.Write([]byte{nak, nak, nak, nak, nak})
+				_, _ = server.Write([]byte{soh})
+				_, _ = server.Write(p0)
+				_, _ = server.Write([]byte{bcc(p0)})
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte{nak, nak, nak, nak, nak})
 			},
 			wantErr: true,
 		},
@@ -754,16 +734,16 @@ func TestTariffDevice_enterProgrammingMode(t *testing.T) {
 			},
 			fn: func() {
 				buf := make([]byte, 15)
-				server.Read(buf)
-				server.Write([]byte("/iekEtest\r\n"))
-				server.Read(buf)
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iekEtest\r\n"))
+				_, _ = server.Read(buf)
 				p0 := []byte{'P', '0', stx, fb, '1', '2', '3', rb, etx}
-				server.Write([]byte{soh})
-				server.Write(p0)
-				server.Write([]byte{bcc(p0)})
-				server.Read(buf)
-				server.Write(breakMsg)
-				server.Write([]byte{bcc(breakMsg[1:])})
+				_, _ = server.Write([]byte{soh})
+				_, _ = server.Write(p0)
+				_, _ = server.Write([]byte{bcc(p0)})
+				_, _ = server.Read(buf)
+				_, _ = server.Write(breakMsg)
+				_, _ = server.Write([]byte{bcc(breakMsg[1:])})
 			},
 			wantErr: true,
 		},
@@ -777,18 +757,18 @@ func TestTariffDevice_enterProgrammingMode(t *testing.T) {
 			},
 			fn: func() {
 				buf := make([]byte, 15)
-				server.Read(buf)
-				server.Write([]byte("/iekEtest\r\n"))
-				server.Read(buf)
+				_, _ = server.Read(buf)
+				_, _ = server.Write([]byte("/iekEtest\r\n"))
+				_, _ = server.Read(buf)
 				p0 := []byte{'P', '0', stx, fb, '1', '2', '3', rb, etx}
-				server.Write([]byte{soh})
-				server.Write(p0)
-				server.Write([]byte{bcc(p0)})
-				server.Read(buf)
+				_, _ = server.Write([]byte{soh})
+				_, _ = server.Write(p0)
+				_, _ = server.Write([]byte{bcc(p0)})
+				_, _ = server.Read(buf)
 				errMsg := []byte{fb, 'E', 'R', 'R', '1', rb, etx}
-				server.Write([]byte{stx})
-				server.Write(errMsg)
-				server.Write([]byte{bcc(errMsg)})
+				_, _ = server.Write([]byte{stx})
+				_, _ = server.Write(errMsg)
+				_, _ = server.Write([]byte{bcc(errMsg)})
 			},
 			wantErr: true,
 		},
@@ -820,7 +800,7 @@ func TestTariffDevice_ImmediateReadOut(t *testing.T) {
 		{
 			name: "Data readout",
 			fn: func() {
-				server.Write([]byte("/ekt3id\r\n\r\nAddr(Val)!\r\n"))
+				_, _ = server.Write([]byte("/ekt3id\r\n\r\nAddr(Val)!\r\n"))
 			},
 			want: &DataBlock{
 				Lines: []DataLine{
@@ -845,7 +825,7 @@ func TestTariffDevice_ImmediateReadOut(t *testing.T) {
 		{
 			name: "Error frame no lf",
 			fn: func() {
-				server.Write([]byte("/ekt3id\r\n\nAddr(Val)!\r\n"))
+				_, _ = server.Write([]byte("/ekt3id\r\n\nAddr(Val)!\r\n"))
 			},
 			want:    nil,
 			ident:   nil,
@@ -854,7 +834,7 @@ func TestTariffDevice_ImmediateReadOut(t *testing.T) {
 		{
 			name: "Error frame no cr",
 			fn: func() {
-				server.Write([]byte("/ekt3id\r\n\rAddr(Val)!\r\n"))
+				_, _ = server.Write([]byte("/ekt3id\r\n\rAddr(Val)!\r\n"))
 			},
 			want:    nil,
 			ident:   nil,
@@ -863,7 +843,7 @@ func TestTariffDevice_ImmediateReadOut(t *testing.T) {
 		{
 			name: "Error invalid data",
 			fn: func() {
-				server.Write([]byte("/ekt3id\r\n\r\nAddrVal)!\r\n"))
+				_, _ = server.Write([]byte("/ekt3id\r\n\r\nAddrVal)!\r\n"))
 			},
 			want:    nil,
 			ident:   nil,
