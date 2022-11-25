@@ -1,184 +1,53 @@
 package iec62056
 
 import (
-	"bytes"
-	"io"
-	"log"
 	"net"
-	"os"
+	"reflect"
 	"testing"
-	"time"
 )
 
-type mockConn struct {
-	io.ReadWriteCloser
-	closed                      bool
-	readDeadLine, writeDeadLine time.Time
-	rBuf, wBuf                  bytes.Buffer
-}
-
-func (b *mockConn) LocalAddr() net.Addr         { return nil }
-func (b *mockConn) RemoteAddr() net.Addr        { return nil }
-func (b *mockConn) SetDeadline(time.Time) error { return nil }
-
-func (b *mockConn) Close() error {
-	b.closed = true
-	return nil
-}
-
-func (b *mockConn) SetReadDeadline(t time.Time) error {
-	b.readDeadLine = t
-	return nil
-}
-
-func (b *mockConn) SetWriteDeadline(t time.Time) error {
-	b.writeDeadLine = t
-	return nil
-}
-
-func (b *mockConn) Read(p []byte) (int, error) {
-	return b.rBuf.Read(p)
-}
-
-func (b *mockConn) Write(p []byte) (int, error) {
-	return b.wBuf.Write(p)
-}
-
-func TestClose(t *testing.T) {
-	var c mockConn
-	conn := newConn(&c, nil, false, 3*time.Second)
-	c.closed = false
-	_ = conn.Close()
-	if !c.closed {
-		t.Error("Close method doesn't closes wrapped connection")
+func listenWithParity() (net.Conn, Conn) {
+	go func() {
+		rv, _ := listener.Accept()
+		ch <- rv
+	}()
+	d := &TCPDialer{
+		SwParity: true,
 	}
+	conn, _ := d.Dial(listener.Addr().String())
+	return <-ch, conn
 }
+func Test_FixParity(t *testing.T) {
+	server, client := listenWithParity()
+	defer server.Close()
+	defer client.Close()
 
-func TestSetReadTimeout(t *testing.T) {
-	var c mockConn
-	rdl := 3 * time.Minute
-	round := time.Minute
-	conn := newConn(&c, nil, false, rdl)
-	c.readDeadLine = time.Time{}
-	tt := time.Now().Add(rdl).Round(round)
-	_ = conn.PrepareRead()
-	dd := c.readDeadLine.Round(round)
-	if dd != tt {
-		t.Error("frame read deadline is not properly set")
-	}
-}
-
-func TestSetWriteTimeout(t *testing.T) {
-	var c mockConn
-	wdl := 3 * time.Minute
-	round := time.Minute
-	conn := newConn(&c, nil, false, wdl)
-	c.writeDeadLine = time.Time{}
-	tt := time.Now().Add(wdl).Round(round)
-	_ = conn.PrepareWrite()
-	dd := c.writeDeadLine.Round(round)
-	if dd != tt {
-		t.Error("frame write deadline is not properly set")
-	}
-}
-
-func TestNoLoggerRead(t *testing.T) {
-	var c mockConn
-	conn := newConn(&c, nil, false, 3*time.Second)
-	_ = conn.PrepareRead()
-	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	c.rBuf.Write(payload)
-	res := make([]byte, len(payload))
-	_ = conn.PrepareRead()
-	_, _ = conn.r.Read(res)
-	res = conn.r.buf.Bytes()
-	if len(res) != 0 {
-		t.Error("frame is saved even without logger configured.")
-	}
-}
-
-func TestNoLoggerWrite(t *testing.T) {
-	var c mockConn
-	conn := newConn(&c, nil, false, 3*time.Second)
-	_ = conn.PrepareWrite()
-	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	_, _ = conn.w.Write(payload)
-	res := conn.w.buf.Bytes()
-	if len(res) != 0 {
-		t.Error("frame is saved even without logger configured.")
-	}
-}
-
-func TestLoggerRead(t *testing.T) {
-	var c mockConn
-	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
-	_ = conn.PrepareRead()
-	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	c.rBuf.Write(payload)
-	res := make([]byte, len(payload))
-	_ = conn.PrepareRead()
-	_, _ = conn.r.Read(res)
-	res = conn.r.buf.Bytes()
-	if len(res) != len(payload) {
-		t.Error("payload and log lengths aren't match")
-	}
-	for i := range payload {
-		if payload[i] != res[i] {
-			t.Error("frame data and log aren't match")
+	td := NewTariffDevice(client)
+	go func() {
+		buf := make([]byte, 10)
+		server.Read(buf)
+		resp := []byte("/ABC6dev\r\n")
+		for i := 0; i < len(resp); i++ {
+			resp[i] |= 0x80
 		}
-	}
-}
-
-func TestLoggerWrite(t *testing.T) {
-	var c mockConn
-	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
-	_ = conn.PrepareWrite()
-	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	_, _ = conn.w.Write(payload)
-	res := conn.w.buf.Bytes()
-	if len(payload) != len(res) {
-		t.Error("payload and log lengths aren't match")
-	}
-	for i := range payload {
-		if payload[i] != res[i] {
-			t.Error("buffered message incorrectly logged")
+		server.Write(resp)
+		if !reflect.DeepEqual(buf[:5], []byte{175, 63, 33, 141, 10}) {
+			t.Error("Parity encoding failed")
 		}
+	}()
+	res, err := td.Identity()
+	if err != nil {
+		t.Error(err.Error())
 	}
-}
 
-func TestLoggerReadReset(t *testing.T) {
-	var c mockConn
-	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
-	_ = conn.PrepareRead()
-	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	c.rBuf.Write(payload)
-	res := make([]byte, len(payload))
-	_ = conn.PrepareRead()
-	_, _ = conn.r.Read(res)
-	res = conn.r.buf.Bytes()
-	if len(res) != len(payload) {
-		t.Error("payload and log lengths aren't match")
+	want := Identity{
+		Device:       "dev",
+		Manufacturer: "ABC",
+		Mode:         ModeC,
+		bri:          '6',
 	}
-	_ = conn.PrepareRead()
-	res = conn.r.buf.Bytes()
-	if len(res) != 0 {
-		t.Error("frame isn't reset")
+	if !reflect.DeepEqual(res, want) {
+		t.Errorf("Sw Parity failed. wanted %v, got %v", want, res)
 	}
-}
 
-func TestLoggerWriteReset(t *testing.T) {
-	var c mockConn
-	conn := newConn(&c, log.New(os.Stderr, "", log.Ldate), false, 3*time.Second)
-	_ = conn.PrepareWrite()
-	payload := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	_, _ = conn.w.Write(payload)
-	res := conn.w.buf.Bytes()
-	if len(payload) != len(res) {
-		t.Error("payload and log lengths aren't match")
-	}
-	_ = conn.PrepareWrite()
-	res = conn.w.buf.Bytes()
-	if len(res) != 0 {
-		t.Error("frame isn't reset")
-	}
 }

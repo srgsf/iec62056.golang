@@ -185,13 +185,12 @@ func (w *parityWrapper) Read(p []byte) (int, error) {
 func (w *parityWrapper) Write(p []byte) (int, error) {
 	p2 := make([]byte, len(p))
 	copy(p2, p)
-	for i, b := range p {
+	for i, b := range p2 {
 		if bits.OnesCount8(b)&0x1 == 1 {
 			p2[i] |= 0x80
 		}
 	}
-	p = p2
-	return w.io.Write(p)
+	return w.io.Write(p2)
 }
 
 // Frame logger
@@ -216,9 +215,8 @@ type reader struct {
 	*bufio.Reader
 }
 
-// reset discards any buffered data. Also resets collected frame's log message.
+// reset resets collected frame's log message.
 func (b *reader) reset(r io.Reader) {
-	b.Reader.Reset(r)
 	b.logger.buf.Reset()
 }
 
@@ -256,9 +254,8 @@ type writer struct {
 	*bufio.Writer
 }
 
-// reset discards any buffered data. Also resets collected frame's log message.
+// reset resets collected frame's log message.
 func (b *writer) reset(w io.Writer) {
-	b.Writer.Reset(w)
 	b.logger.buf.Reset()
 }
 

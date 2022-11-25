@@ -7,6 +7,7 @@ import (
 
 var ErrNoConnection = errors.New("connection is not set for tariff device")
 var ErrInvalidPassword = errors.New("invalid password")
+var ErrInvalidFrame = errors.New("invalid frame received")
 
 // PasswordFunc callback accepts operand for secure algorithm
 // and returns encoded value.
@@ -32,14 +33,17 @@ type TariffDevice struct {
 	identity *Identity
 }
 
+// NewTariffDevice creates a client for broadcast messages
 func NewTariffDevice(conn Conn) *TariffDevice {
 	return WithPassword(conn, "", nil)
 }
 
+// WithAddress creates a client with address in a network
 func WithAddress(conn Conn, address string) *TariffDevice {
 	return WithPassword(conn, address, nil)
 }
 
+// WithPassword creates a client that is able to authenticate on commands
 func WithPassword(conn Conn, address string, passCallback PasswordFunc) *TariffDevice {
 	return &TariffDevice{
 		connection:  conn,
@@ -49,12 +53,19 @@ func WithPassword(conn Conn, address string, passCallback PasswordFunc) *TariffD
 	}
 }
 
+// Resets the networking connection
 func (t *TariffDevice) Reset(conn Conn) {
 	t.connection = conn
+	t.DropProgrammingMode()
+}
+
+// Drops programming mode and moves protocol to start state
+func (t *TariffDevice) DropProgrammingMode() {
 	t.programmingMode = false
 	t.identity = nil
 }
 
+// Retrieves or reads identity message form device
 func (t *TariffDevice) Identity() (Identity, error) {
 	if t.identity != nil {
 		return *t.identity, nil
@@ -65,10 +76,8 @@ func (t *TariffDevice) Identity() (Identity, error) {
 	return *t.identity, nil
 }
 
-func (t *TariffDevice) ReadOut(isModeD bool) (*DataBlock, error) {
-	if isModeD {
-		return t.modeDreadOut()
-	}
+// Reads Read Out message from device. Works for ModeA, ModeB and ModeC
+func (t *TariffDevice) ReadOut() (*DataBlock, error) {
 	data, err := t.handShake()
 	if err != nil {
 		return nil, err
@@ -88,6 +97,7 @@ func (t *TariffDevice) ReadOut(isModeD bool) (*DataBlock, error) {
 	return data, nil
 }
 
+// Requests an Option from device. Available for ModeC only
 func (t *TariffDevice) Option(o OptionSelectMessage) (*DataBlock, error) {
 	if !o.skipHandShake {
 		_, err := t.handShake()
@@ -131,20 +141,17 @@ func (t *TariffDevice) Option(o OptionSelectMessage) (*DataBlock, error) {
 	return &rv, nil
 }
 
+// Sends command to device. Result can be either response message or error message
 func (t *TariffDevice) Command(cmd Command) (*DataBlock, error) {
-	if !t.isInProgrammingMode() {
-		if cmd.Id == CmdB0 {
-			return nil, nil
-		}
+	if cmd.Id == CmdB0 {
+		return nil, t.SendBreak()
+	}
 
+	if !t.isInProgrammingMode() {
 		err := t.enterProgrammingMode()
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	if cmd.Id == CmdB0 {
-		return nil, t.SendBreak()
 	}
 
 	data, err := cmd.MarshalBinary()
@@ -163,6 +170,7 @@ func (t *TariffDevice) Command(cmd Command) (*DataBlock, error) {
 	return &db, nil
 }
 
+// Sends CmdB0 command to device.
 func (t *TariffDevice) SendBreak() error {
 	err := writeMessage(t.connection, breakMsg)
 	t.identity = nil
@@ -203,6 +211,7 @@ func (t *TariffDevice) passExchange(p []byte) error {
 	if err != nil {
 		return err
 	}
+	ds.Address = ""
 
 	if t.pass == nil {
 		t.programmingMode = true
@@ -221,12 +230,18 @@ func (t *TariffDevice) passExchange(p []byte) error {
 	}
 	data, err = t.cmd(data)
 	if err != nil {
+		if err == ErrNAK {
+			return ErrInvalidPassword
+		}
 		return err
 	}
 
 	if data[0] == ack {
 		t.programmingMode = true
 		return nil
+	}
+	if data[0] == 'B' && data[1] == '0' {
+		return errors.New("device sent break")
 	}
 	var r DataSet
 	if err = r.UnmarshalBinary(data); err != nil {
@@ -238,39 +253,47 @@ func (t *TariffDevice) passExchange(p []byte) error {
 	return ErrInvalidPassword
 }
 
-func (t *TariffDevice) modeDreadOut() (*DataBlock, error) {
+// Read Out message for protocol ModeD
+func (t *TariffDevice) ImmediateDreadOut() (*Identity, *DataBlock, error) {
 	if err := t.connection.SetBaudRate(2400); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	data, err := readMessage(t.connection)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var id Identity
 	err = id.UnmarshalBinary(data)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	id.Mode = ModeD
-	data, err = readMessage(t.connection)
-	if err != nil {
-		return nil, err
-	}
 
-	if len(data) == 2 {
-		data, err = readMessage(t.connection)
-		if err != nil {
-			return nil, err
-		}
+	b, err := t.connection.ReadByte()
+	if err != nil || b != cr {
+		return nil, nil, ErrInvalidFrame
 	}
-	var b DataBlock
+	b, err = t.connection.ReadByte()
+	if err != nil || b != lf {
+		return nil, nil, ErrInvalidFrame
+	}
+	data, err = t.connection.ReadBytes(end)
 
-	err = b.UnmarshalBinary(data)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	_, err = t.connection.ReadBytes(lf)
+	if err != nil {
+		return nil, nil, err
+	}
+	var bb DataBlock
+
+	err = bb.UnmarshalBinary(data)
+	if err != nil {
+		return nil, nil, err
 	}
 	t.identity = &id
-	return &b, nil
+	return &id, &bb, nil
 }
 
 func (t *TariffDevice) isInProgrammingMode() bool {
@@ -377,8 +400,10 @@ func readMessage(c Conn) ([]byte, error) {
 			return []byte{head}, err
 		case stx, soh:
 			delimiter = etx // only full blocks are supported
-		default:
+		case start:
 			delimiter = lf
+		default:
+			return nil, ErrInvalidFrame
 		}
 		data, err := c.ReadBytes(delimiter)
 		if err != nil {

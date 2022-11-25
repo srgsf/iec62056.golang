@@ -144,6 +144,9 @@ func (ds *DataSet) MarshalBinary() ([]byte, error) {
 }
 
 func (ds *DataSet) UnmarshalBinary(data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
 	fbIdx := bytes.IndexByte(data, fb)
 	if fbIdx == -1 {
 		return errors.New("front boundary is missing")
@@ -182,38 +185,52 @@ func (dl *DataLine) UnmarshalBinary(data []byte) error {
 		if i := bytes.IndexByte(data, rb); i >= 0 {
 			return i + 1, data[:i+1], nil
 		}
-
-		if atEOF {
-			return len(data), data, errors.New("invalid data set")
-		}
-		return 0, nil, nil
+		return len(data), data, errors.New("invalid data set")
 	})
 	*dl = DataLine{}
 	for s.Scan() {
-		if s.Err() != nil {
-			return s.Err()
-		}
 		var ds DataSet
 		if err := ds.UnmarshalBinary(s.Bytes()); err != nil {
 			return err
 		}
 		dl.Sets = append(dl.Sets, ds)
 	}
+	if s.Err() != nil {
+		return s.Err()
+	}
 	return nil
 }
 
-func (db *DataBlock) UnmarshalBinary(data []byte) error {
+func (db *DataBlock) UnmarshalBinary(dataIn []byte) error {
+	if len(dataIn) == 0 {
+		return nil
+	}
+	i := bytes.IndexByte(dataIn, end)
+	if i == 0 {
+		return nil
+	}
+	data := make([]byte, len(dataIn))
+	copy(data, dataIn)
+	if i > 0 {
+		data = data[0:i]
+	}
+
+	i = bytes.IndexByte(data, etx)
+	if i > 0 {
+		data = data[0:i]
+	}
+
 	s := bufio.NewScanner(bytes.NewReader(data))
 	*db = DataBlock{}
 	for s.Scan() {
-		if s.Err() != nil {
-			return s.Err()
-		}
 		var dl DataLine
 		if err := dl.UnmarshalBinary(s.Bytes()); err != nil {
 			return err
 		}
 		db.Lines = append(db.Lines, dl)
+	}
+	if s.Err() != nil {
+		return s.Err()
 	}
 	return nil
 }
